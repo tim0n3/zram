@@ -87,12 +87,6 @@ Or write a `zram_teardown.sls` state.
 
 ---
 
-## 📜 License
-
-MIT License — feel free to use and adapt.
-
----
-
 ## 🤝 Contributing
 
 Pull requests, feedback, and suggestions are welcome!
