@@ -73,11 +73,7 @@ ZRAM swap enabled successfully!
 - Suitable for lightweight systems like Raspberry Pi or VM hosts where physical RAM is limited.
 ---
 
-<<<<<<< HEAD
-**Author**: [tim0n3]
-=======
 **Author**: [tim0n3](https://github.com/tim0n3)
->>>>>>> 906c3b3 (feat(enhance): Readme file updates.)
 Feel free to contribute or open issues on GitHub!
 
 ---
