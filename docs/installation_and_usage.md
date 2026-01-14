@@ -44,6 +44,8 @@ The `zram.sh` script is designed to run as a systemd-managed, one-shot daemon on
 
 Create `/etc/zram-daemon.conf` to override defaults:
 
+Permissions: ensure the file is owned by `root:root` and not writable by non-root users (mode `0644`).
+
 ```bash
 # Example configuration overrides
 COMPRESSION_ALGO="zstd"
