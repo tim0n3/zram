@@ -7,7 +7,7 @@ echo "=== ZRAM Swap Check ===" | tee -a "$LOGFILE"
 echo "Running as $(whoami) on $(date)" | tee -a "$LOGFILE"
 
 # Check if swap is enabled
-if ! swapon --show > /dev/null 2>&1; then
+if ! swapon --show >/dev/null 2>&1; then
     echo "No swap is active on this system." | tee -a "$LOGFILE"
     exit 1
 fi
@@ -19,7 +19,7 @@ swapon --summary | tee -a "$LOGFILE"
 # Check for any storage-based swap
 STORAGE_SWAP=$(swapon --summary | awk '!/zram/ && !/Filename/ {print $1}')
 
-if [[ -z "$STORAGE_SWAP" ]]; then
+if [[ -z $STORAGE_SWAP ]]; then
     echo "✅ No storage-based swap is active." | tee -a "$LOGFILE"
 else
     echo "⚠️ Storage swap detected: $STORAGE_SWAP" | tee -a "$LOGFILE"
@@ -36,7 +36,7 @@ fi
 # Check if ZRAM swap is active
 ZRAM_ACTIVE=$(swapon --summary | grep "zram")
 
-if [[ -z "$ZRAM_ACTIVE" ]]; then
+if [[ -z $ZRAM_ACTIVE ]]; then
     echo "❌ No ZRAM swap is active. Check ZRAM configuration!" | tee -a "$LOGFILE"
     exit 1
 else

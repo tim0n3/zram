@@ -5,15 +5,15 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-mapfile -t sh_files < <(find . -type d \( -name .git -o -name .github \) -prune -o -type f -name '*.sh' -print)
+mapfile -t sh_files < <(find . -type d -name .git -prune -o -type f -name '*.sh' -print)
 
-if (( ${#sh_files[@]} == 0 )); then
+if ((${#sh_files[@]} == 0)); then
     echo "No shell scripts found."
     exit 0
 fi
 
 status_dir=${LINT_STATUS_DIR:-}
-if [[ -n "$status_dir" ]]; then
+if [[ -n $status_dir ]]; then
     mkdir -p "$status_dir"
 fi
 
@@ -38,12 +38,12 @@ for file in "${sh_files[@]}"; do
     fi
 done
 
-if [[ -n "$status_dir" ]]; then
-    printf '%s\n' "$shellcheck_rc" > "$status_dir/shellcheck.rc"
-    printf '%s\n' "$shfmt_rc" > "$status_dir/shfmt.rc"
-    printf '%s\n' "$bash_rc" > "$status_dir/bash-n.rc"
+if [[ -n $status_dir ]]; then
+    printf '%s\n' "$shellcheck_rc" >"$status_dir/shellcheck.rc"
+    printf '%s\n' "$shfmt_rc" >"$status_dir/shfmt.rc"
+    printf '%s\n' "$bash_rc" >"$status_dir/bash-n.rc"
 fi
 
-if (( shellcheck_rc || shfmt_rc || bash_rc )); then
+if ((shellcheck_rc || shfmt_rc || bash_rc)); then
     exit 1
 fi

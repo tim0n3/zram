@@ -29,7 +29,7 @@ Settings:
 - Restrict force pushes and deletions
 MSG
 
-if [[ "${APPLY:-}" != "1" ]]; then
+if [[ ${APPLY:-} != "1" ]]; then
     echo "Dry run only. Re-run with APPLY=1 to apply changes."
     exit 1
 fi

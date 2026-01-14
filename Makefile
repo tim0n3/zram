@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-SH_FILES := $(shell find . -type d \( -name .git -o -name .github \) -prune -o -type f -name '*.sh' -print)
+SH_FILES := $(shell find . -type d -name .git -prune -o -type f -name '*.sh' -print)
 
 .PHONY: help lint fmt
 

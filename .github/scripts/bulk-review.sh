@@ -24,7 +24,13 @@ if [[ -z "$head_sha" ]]; then
 fi
 
 if [[ -z "$base_sha" ]]; then
-    base_sha=$(git merge-base "$head_sha" HEAD^ 2>/dev/null || true)
+    if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+        base_sha=$(git merge-base "$head_sha" "@{u}" 2>/dev/null || true)
+    fi
+fi
+
+if [[ -z "$base_sha" ]]; then
+    base_sha=$(git rev-parse "$head_sha^" 2>/dev/null || true)
 fi
 
 if [[ -z "$base_sha" ]]; then
