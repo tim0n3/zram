@@ -1,89 +1,270 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-export LANG=C
+# ZRAM setup for systemd startup.
+# - Configures one ZRAM device per CPU core.
+# - Keeps system swap active and lower priority than ZRAM.
+# - Fails gracefully if requirements are missing or not installable.
+# - Logs to /var/log/zram_setup.log and stdout/stderr for systemd journal.
+
+set -u
+
 LOGFILE="/var/log/zram_setup.log"
+CONFIG_FILE="/etc/zram-daemon.conf"
 
-echo "=== ZRAM Setup Script ===" | tee -a $LOGFILE
-echo "Running as $(whoami) on $(date)" | tee -a $LOGFILE
+COMPRESSION_ALGO="zstd"
+ZRAM_PRIORITY=100
+SYSTEM_SWAP_PRIORITY=10
 
-# Check if running as root (unless started from rc.local)
-if [[ $EUID -ne 0 ]]; then
-    echo "This script must be run as root or with sudo!" | tee -a $LOGFILE
-    exit 1
-fi
-
-cores=$(nproc --all)
-echo "Detected $cores CPU cores." | tee -a $LOGFILE
-
-# Function to log and handle errors
-log_and_fail() {
-    echo "ERROR: $1" | tee -a $LOGFILE
-    exit 1
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp
+    timestamp=$(date -Is)
+    printf '%s [%s] %s\n' "$timestamp" "$level" "$message" | tee -a "$LOGFILE"
 }
 
-# Disable existing ZRAM swap
-core=0
-while [ $core -lt $cores ]; do
-    if [[ -b /dev/zram$core ]]; then
-        echo "Disabling swap on /dev/zram$core" | tee -a $LOGFILE
-        swapoff /dev/zram$core || log_and_fail "Failed to disable swap on /dev/zram$core"
-    fi
-    let core=core+1
-done
-
-# Unload the ZRAM module if it's active
-if lsmod | grep -q zram; then
-    echo "Removing zram module..." | tee -a $LOGFILE
-    rmmod zram || log_and_fail "Failed to remove zram module"
-fi
-
-# If script is called with "stop", exit now
-if [[ $1 == "stop" ]]; then
-    echo "ZRAM stopped successfully." | tee -a $LOGFILE
+fail_gracefully() {
+    log "WARN" "$1"
+    ensure_system_swap_active
     exit 0
-fi
+}
 
-# Ensure zram module is available, otherwise install missing kernel modules
-if ! modinfo zram &>/dev/null; then
-    echo "ZRAM module not found! Attempting to install missing kernel modules..." | tee -a $LOGFILE
-    apt update && apt install -y linux-modules-extra-$(uname -r) || log_and_fail "Failed to install linux-modules-extra-$(uname -r)"
+require_root() {
+    if [[ ${EUID} -ne 0 ]]; then
+        log "ERROR" "This script must be run as root."
+        exit 1
+    fi
+}
 
-    # Retry loading the module
-    modprobe zram || log_and_fail "ZRAM module is still missing after installation."
-fi
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-# Install zram-tools if missing
-if ! command -v zramctl &> /dev/null; then
-    echo "Installing zram-tools..." | tee -a $LOGFILE
-    apt update && apt install -y zram-tools || log_and_fail "Failed to install zram-tools"
-fi
+load_config() {
+    if [[ -f "$CONFIG_FILE" ]]; then
+        # shellcheck disable=SC1090
+        source "$CONFIG_FILE"
+        log "INFO" "Loaded configuration from $CONFIG_FILE"
+    fi
+}
 
-swapoff -a || log_and_fail "Failed to disable all swap"
+cpu_cores() {
+    if command_exists nproc; then
+        nproc --all
+    else
+        getconf _NPROCESSORS_ONLN
+    fi
+}
 
-echo "Enabling ZRAM with $cores devices..." | tee -a $LOGFILE
-modprobe zram num_devices=$cores || log_and_fail "Failed to load ZRAM module"
+install_package() {
+    local package="$1"
+    if command_exists apt-get; then
+        apt-get update && apt-get install -y "$package"
+    elif command_exists dnf; then
+        dnf install -y "$package"
+    elif command_exists yum; then
+        yum install -y "$package"
+    elif command_exists pacman; then
+        pacman -Sy --noconfirm "$package"
+    elif command_exists zypper; then
+        zypper --non-interactive install "$package"
+    else
+        return 1
+    fi
+}
 
-# Select compression algorithm (modify if needed)
-COMPRESSION_ALGO="zstd"
-echo "Using compression algorithm: $COMPRESSION_ALGO" | tee -a $LOGFILE
+ensure_dependencies() {
+    local missing=()
 
-# Set compression algorithm
-for core in $(seq 0 $((cores-1))); do
-    echo "$COMPRESSION_ALGO" | tee /sys/block/zram$core/comp_algorithm || log_and_fail "Failed to set compression algorithm on /dev/zram$core"
-done
+    for binary in awk modinfo modprobe mkswap swapon swapoff; do
+        if ! command_exists "$binary"; then
+            missing+=("$binary")
+        fi
+    done
 
-# Allocate memory per ZRAM device (split across cores)
-totalmem=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-mem_per_core=$(( totalmem * 1024 / cores ))
+    if (( ${#missing[@]} )); then
+        log "WARN" "Missing required binaries: ${missing[*]}"
+        fail_gracefully "Cannot configure ZRAM without required binaries."
+    fi
 
-core=0
-while [ $core -lt $cores ]; do
-    echo "Configuring /dev/zram$core with ${mem_per_core} bytes" | tee -a $LOGFILE
-    echo $mem_per_core | tee /sys/block/zram$core/disksize || log_and_fail "Failed to set disksize on /dev/zram$core"
-    mkswap /dev/zram$core || log_and_fail "Failed to create swap on /dev/zram$core"
-    swapon -p 100 /dev/zram$core || log_and_fail "Failed to enable swap on /dev/zram$core"
-    let core=core+1
-done
+    if ! modinfo zram >/dev/null 2>&1; then
+        log "WARN" "ZRAM module not found. Attempting to install kernel modules."
+        if ! install_package "linux-modules-extra-$(uname -r)"; then
+            fail_gracefully "ZRAM module not available and installation failed."
+        fi
+    fi
+}
 
-echo "ZRAM swap enabled successfully!" | tee -a $LOGFILE
-swapon --summary | tee -a $LOGFILE
+ensure_system_swap_active() {
+    if ! command_exists swapon; then
+        log "WARN" "swapon is unavailable; skipping system swap checks."
+        return 0
+    fi
+
+    if [[ ! -f /etc/fstab ]]; then
+        log "INFO" "No /etc/fstab found; skipping system swap checks."
+        return 0
+    fi
+
+    if ! swapon --all --ifexists; then
+        log "WARN" "Failed to enable swap from /etc/fstab."
+    fi
+
+    if command_exists swapoff; then
+        lower_system_swap_priority
+    fi
+}
+
+list_active_swaps() {
+    awk 'NR>1 {print $1" "$5" "$4}' /proc/swaps
+}
+
+lower_system_swap_priority() {
+    local name priority used
+    while read -r name priority used; do
+        [[ -z "$name" ]] && continue
+        if [[ "$name" == /dev/zram* ]]; then
+            continue
+        fi
+        if [[ "$priority" -ge "$ZRAM_PRIORITY" ]]; then
+            if [[ "$used" -gt 0 ]]; then
+                log "WARN" "Swap $name in use; cannot lower priority safely."
+                continue
+            fi
+            log "INFO" "Lowering priority for $name to $SYSTEM_SWAP_PRIORITY."
+            if swapoff "$name"; then
+                if ! swapon -p "$SYSTEM_SWAP_PRIORITY" "$name"; then
+                    log "WARN" "Failed to re-enable $name with lower priority."
+                fi
+            else
+                log "WARN" "Failed to disable $name to adjust priority."
+            fi
+        fi
+    done < <(list_active_swaps)
+}
+
+disable_existing_zram() {
+    local device
+    for device in /dev/zram*; do
+        [[ -b "$device" ]] || continue
+        log "INFO" "Disabling swap on $device"
+        swapoff "$device" || log "WARN" "Failed to disable swap on $device"
+    done
+
+    local sys_device
+    for sys_device in /sys/block/zram*; do
+        [[ -d "$sys_device" ]] || continue
+        if [[ -w "$sys_device/reset" ]]; then
+            echo 1 > "$sys_device/reset"
+            log "INFO" "Reset $sys_device"
+        fi
+    done
+}
+
+ensure_zram_devices() {
+    local cores="$1"
+
+    if ! modprobe zram num_devices="$cores"; then
+        if [[ ! -d /sys/class/zram-control ]]; then
+            fail_gracefully "Unable to load ZRAM module."
+        fi
+    fi
+
+    if [[ -d /sys/class/zram-control ]]; then
+        local existing
+        existing=$(ls /sys/block/zram* 2>/dev/null | wc -l | tr -d ' ')
+        while [[ "$existing" -lt "$cores" ]]; do
+            if ! echo 1 > /sys/class/zram-control/hot_add; then
+                fail_gracefully "Unable to create additional ZRAM devices."
+            fi
+            existing=$((existing + 1))
+        done
+    fi
+}
+
+configure_zram_devices() {
+    local cores="$1"
+    local mem_total_kb
+    local mem_per_core
+
+    mem_total_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+    if [[ -z "$mem_total_kb" ]]; then
+        fail_gracefully "Unable to read total memory."
+    fi
+
+    mem_per_core=$((mem_total_kb * 1024 / cores))
+
+    log "INFO" "Using compression algorithm: $COMPRESSION_ALGO"
+    log "INFO" "Configuring $cores ZRAM devices with ${mem_per_core} bytes each"
+
+    for core in $(seq 0 $((cores - 1))); do
+        local device="/dev/zram${core}"
+        local sys_device="/sys/block/zram${core}"
+
+        if [[ ! -b "$device" ]]; then
+            log "WARN" "Skipping missing device $device"
+            continue
+        fi
+
+        if [[ -w "$sys_device/comp_algorithm" ]]; then
+            if ! echo "$COMPRESSION_ALGO" > "$sys_device/comp_algorithm"; then
+                log "WARN" "Failed to set compression on $device"
+            fi
+        fi
+
+        if [[ -w "$sys_device/disksize" ]]; then
+            if ! echo "$mem_per_core" > "$sys_device/disksize"; then
+                log "WARN" "Failed to set disksize on $device"
+                continue
+            fi
+        fi
+
+        if ! mkswap "$device" >/dev/null 2>&1; then
+            log "WARN" "Failed to create swap on $device"
+            continue
+        fi
+
+        if ! swapon -p "$ZRAM_PRIORITY" "$device"; then
+            log "WARN" "Failed to enable swap on $device"
+        fi
+    done
+}
+
+main() {
+    log "INFO" "=== ZRAM Setup Script ==="
+    log "INFO" "Running as $(whoami) on $(date)"
+
+    require_root
+    load_config
+
+    local cores
+    cores=$(cpu_cores)
+    if [[ -z "$cores" || "$cores" -lt 1 ]]; then
+        fail_gracefully "Unable to determine CPU core count."
+    fi
+
+    log "INFO" "Detected $cores CPU cores."
+
+    if [[ ${1:-} == "stop" ]]; then
+        disable_existing_zram
+        ensure_system_swap_active
+        log "INFO" "ZRAM stopped successfully."
+        exit 0
+    fi
+
+    ensure_dependencies
+
+    disable_existing_zram
+    ensure_system_swap_active
+
+    ensure_zram_devices "$cores"
+    configure_zram_devices "$cores"
+
+    ensure_system_swap_active
+
+    log "INFO" "ZRAM swap enabled successfully."
+    swapon --summary | tee -a "$LOGFILE"
+}
+
+main "$@"

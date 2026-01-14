@@ -1,0 +1,60 @@
+name: PR Review Automation
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  request-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label and comment for Codex/Gemini review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = [
+              { name: 'needs-codex-review', color: '5319e7', description: 'Awaiting Codex design/logic review' },
+              { name: 'needs-gemini-review', color: 'fef2c0', description: 'Awaiting Gemini general review' }
+            ];
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description
+                });
+              } catch (error) {
+                if (error.status !== 422) {
+                  core.warning(`Label create failed: ${label.name} (${error.message})`);
+                }
+              }
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: labels.map(label => label.name)
+            });
+
+            const body = [
+              'Automated review kickoff:',
+              '- **Codex**: lead design/complex logic review (final authority on conflicts).',
+              '- **Gemini**: general code generation review and feedback.',
+              '- If Codex and Gemini disagree, Codex is the tie-breaker. If Codex and repo owner disagree, the owner is the tie-breaker.',
+              '- Review priorities: **repo purpose** → **feature function** → **experience**.'
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });

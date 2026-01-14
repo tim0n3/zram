@@ -1,79 +1,65 @@
-# 🧠 ZRAM Setup Script
+# 🧠 ZRAM Setup Script (systemd-ready)
 
-A simple and robust Bash script to configure compressed swap using ZRAM on Linux systems. This script automatically disables any existing ZRAM configurations, sets up new ZRAM swap devices across all CPU cores, and applies a chosen compression algorithm (`zstd` by default). Ideal for performance tuning and memory-constrained systems.
+A production-safe Bash script to configure compressed swap with ZRAM on Linux systems. It is designed to run as a systemd-managed, one-shot daemon at boot, creating one ZRAM device per CPU core, setting a high ZRAM priority, and keeping any system swap configured in `/etc/fstab` enabled with a lower priority.
 
 ## 🚀 Features
 
-- Automatically detects CPU cores and configures one ZRAM device per core.
-- Applies the `zstd` compression algorithm (easily configurable).
-- Gracefully disables existing ZRAM configurations and modules.
-- Logs all actions to `/var/log/zram_setup.log`.
-- Optionally disables ZRAM via the `stop` parameter.
-- Installs missing dependencies like `zram-tools` and `linux-modules-extra-*`.
+- One ZRAM swap device per CPU core.
+- Default compression algorithm: `zstd` (configurable).
+- Works as a systemd one-shot daemon (`zram.service`).
+- Keeps system swap active but ensures it is used **after** ZRAM.
+- Fails gracefully when dependencies are missing or cannot be installed.
+- Logs to `/var/log/zram_setup.log` and the systemd journal.
 
 ## 📦 Requirements
 
-- Linux (Debian-based systems tested)
-- Root privileges
-- Internet access (for installing dependencies if missing)
+- Linux with ZRAM support (`zram` kernel module).
+- Root privileges.
+- Optional internet access for package installation when needed.
 
-## 🛠️ Installation
+## 🛠️ Installation (systemd)
 
-Clone the repository and make the script executable:
-
-```
-git clone https://github.com/yourusername/zram-setup-script.git
-cd zram-setup-script
-chmod +x zram_setup.sh
+```bash
+sudo install -m 0755 zram.sh /usr/local/sbin/zram.sh
+sudo install -m 0644 systemd/zram.service /etc/systemd/system/zram.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now zram.service
 ```
 
 ## ⚙️ Usage
 
-To **enable ZRAM swap**:
+- Start or reconfigure:
+  ```bash
+  sudo systemctl start zram.service
+  ```
 
-```
-sudo ./zram_setup.sh
-```
+- Stop ZRAM (system swap remains enabled):
+  ```bash
+  sudo systemctl stop zram.service
+  ```
 
-To **stop ZRAM swap and remove the module**:
-
-```
-sudo ./zram_setup.sh stop
-```
-
-## 📝 Log File
-
-All activity is logged to:
-
-```
-/var/log/zram_setup.log
-```
-
-Use this to troubleshoot or verify ZRAM activation.
+- Manual run (without systemd):
+  ```bash
+  sudo /usr/local/sbin/zram.sh
+  sudo /usr/local/sbin/zram.sh stop
+  ```
 
 ## 🔧 Configuration
 
-- **Compression algorithm**: Default is `zstd`. You can modify the `COMPRESSION_ALGO` variable inside the script to use alternatives like `lz4`, `lzo`, or `zlib`.
+Create `/etc/zram-daemon.conf` to override defaults:
 
-## 🧪 Example Output
-
-```
-Detected 4 CPU cores.
-Disabling swap on /dev/zram0
-Removing zram module...
-Enabling ZRAM with 4 devices...
-Using compression algorithm: zstd
-Configuring /dev/zram0 with 2147483648 bytes
-ZRAM swap enabled successfully!
+```bash
+COMPRESSION_ALGO="zstd"
+ZRAM_PRIORITY=100
+SYSTEM_SWAP_PRIORITY=10
 ```
 
-## ❗ Notes
+## 📝 Documentation
 
-- On first run, the script may install missing kernel modules (`linux-modules-extra-$(uname -r)`) and tools (`zram-tools`).
-- Suitable for lightweight systems like Raspberry Pi or VM hosts where physical RAM is limited.
+- [Installation, usage, and troubleshooting](docs/installation_and_usage.md)
+- [Technical design specification](docs/techinical_design_specification.md)
+- [Choosing between ZRAM and Zswap](docs/choosing_between_zram_and_zswap_-_practical_guide.md)
+
 ---
 
 **Author**: [tim0n3](https://github.com/tim0n3)
-Feel free to contribute or open issues on GitHub!
-
----
