@@ -13,27 +13,27 @@ pr_number=""
 base_sha=""
 head_sha=""
 
-if [[ -n "${GITHUB_EVENT_PATH:-}" && -f "$GITHUB_EVENT_PATH" ]]; then
+if [[ -n ${GITHUB_EVENT_PATH:-} && -f $GITHUB_EVENT_PATH ]]; then
     pr_number=$(jq -r '.pull_request.number // .number // empty' "$GITHUB_EVENT_PATH")
     base_sha=$(jq -r '.pull_request.base.sha // empty' "$GITHUB_EVENT_PATH")
     head_sha=$(jq -r '.pull_request.head.sha // empty' "$GITHUB_EVENT_PATH")
 fi
 
-if [[ -z "$head_sha" ]]; then
+if [[ -z $head_sha ]]; then
     head_sha=$(git rev-parse HEAD)
 fi
 
-if [[ -z "$base_sha" ]]; then
-    if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+if [[ -z $base_sha ]]; then
+    if git rev-parse --abbrev-ref --symbolic-full-name "@{u}" >/dev/null 2>&1; then
         base_sha=$(git merge-base "$head_sha" "@{u}" 2>/dev/null || true)
     fi
 fi
 
-if [[ -z "$base_sha" ]]; then
+if [[ -z $base_sha ]]; then
     base_sha=$(git rev-parse "$head_sha^" 2>/dev/null || true)
 fi
 
-if [[ -z "$base_sha" ]]; then
+if [[ -z $base_sha ]]; then
     base_sha="$head_sha"
 fi
 
@@ -42,21 +42,21 @@ LINT_STATUS_DIR="$out_dir" ./scripts/lint.sh >"$lint_out" 2>&1
 lint_rc=$?
 set -e
 
-printf '%s\n' "$lint_rc" > "$lint_rc_file"
+printf '%s\n' "$lint_rc" >"$lint_rc_file"
 
 commit_list=$(git rev-list --reverse "$base_sha..$head_sha" 2>/dev/null || true)
 
 {
     echo "## Bulk Review"
     echo
-    if [[ -n "$pr_number" ]]; then
+    if [[ -n $pr_number ]]; then
         echo "- PR: #$pr_number"
     fi
     echo "- Base: $base_sha"
     echo "- Head: $head_sha"
     echo
     echo "### Commits in this PR"
-    if [[ -z "$commit_list" ]]; then
+    if [[ -z $commit_list ]]; then
         echo "_No commits found between base and head._"
     else
         count=1
@@ -65,25 +65,25 @@ commit_list=$(git rev-list --reverse "$base_sha..$head_sha" 2>/dev/null || true)
             subject=$(git log -1 --format=%s "$sha")
             echo "$count. \`$short_sha\` $subject"
             files=$(git diff-tree --no-commit-id --name-only -r "$sha")
-            if [[ -z "$files" ]]; then
+            if [[ -z $files ]]; then
                 echo "   - (no files)"
             else
                 while read -r file; do
                     echo "   - $file"
-                done <<< "$files"
+                done <<<"$files"
             fi
             count=$((count + 1))
-        done <<< "$commit_list"
+        done <<<"$commit_list"
     fi
     echo
     echo "### Lint results"
-    echo "\`\`\`"
-    if [[ -s "$lint_out" ]]; then
+    echo '```'
+    if [[ -s $lint_out ]]; then
         cat "$lint_out"
     else
         echo "No lint output captured."
     fi
-    echo "\`\`\`"
-} > "$report_path"
+    echo '```'
+} >"$report_path"
 
 exit 0

@@ -5,7 +5,7 @@ set -euo pipefail
 out_dir=".github/scripts/out"
 lint_out="$out_dir/lint.out"
 
-if [[ -z "${GITHUB_EVENT_PATH:-}" || ! -f "$GITHUB_EVENT_PATH" ]]; then
+if [[ -z ${GITHUB_EVENT_PATH:-} || ! -f $GITHUB_EVENT_PATH ]]; then
     echo "GITHUB_EVENT_PATH is missing; cannot create issues."
     exit 1
 fi
@@ -19,18 +19,18 @@ repo_full=$(jq -r '.repository.full_name' "$GITHUB_EVENT_PATH")
 pr_number=$(jq -r '.pull_request.number // .number // empty' "$GITHUB_EVENT_PATH")
 pr_url=$(jq -r '.pull_request.html_url // empty' "$GITHUB_EVENT_PATH")
 
-if [[ -z "$pr_number" ]]; then
+if [[ -z $pr_number ]]; then
     echo "PR number not found; cannot create issues."
     exit 1
 fi
 
-if [[ -z "$pr_url" ]]; then
+if [[ -z $pr_url ]]; then
     pr_url="https://github.com/$repo_full/pull/$pr_number"
 fi
 
 extract_section() {
     local header="$1"
-    if [[ ! -f "$lint_out" ]]; then
+    if [[ ! -f $lint_out ]]; then
         return 0
     fi
     awk -v header="$header" '
@@ -49,30 +49,36 @@ create_issue() {
     local category="$1"
     local details="$2"
     local title="Bulk Review PR #${pr_number}: ${category}"
+    local body
 
     if issue_exists "$title"; then
         echo "Issue already open: $title"
         return 0
     fi
 
-    if [[ -z "$details" ]]; then
+    if [[ -z $details ]]; then
         details="(No output captured.)"
     fi
 
-    gh issue create --repo "$repo_full" --title "$title" --body "This issue was created from PR #${pr_number}: ${pr_url}
+    body=$(
+        cat <<EOF
+This issue was created from PR #${pr_number}: ${pr_url}
 
 Category: ${category}
 
 How to fix:
-1. Run \\`make lint\\` locally.
+1. Run \`make lint\` locally.
 2. Address the ${category} findings.
 3. Push updates to the PR and re-run the checks.
 
 Details:
-\\`\\`\\`
+\`\`\`
 ${details}
-\\`\\`\\`
-"
+\`\`\`
+EOF
+    )
+
+    gh issue create --repo "$repo_full" --title "$title" --body "$body"
 }
 
 categories=(
@@ -82,10 +88,10 @@ categories=(
 )
 
 for entry in "${categories[@]}"; do
-    IFS=: read -r title rc_file header <<< "$entry"
+    IFS=: read -r title rc_file header <<<"$entry"
     rc_path="$out_dir/$rc_file"
 
-    if [[ ! -f "$rc_path" ]]; then
+    if [[ ! -f $rc_path ]]; then
         continue
     fi
 
