@@ -57,7 +57,7 @@ SYSTEM_SWAP_PRIORITY=10
 ## 📝 Documentation
 
 - [Installation, usage, and troubleshooting](docs/installation_and_usage.md)
-- [Technical design specification](docs/techinical_design_specification.md)
+- [Technical design specification](docs/technical_design_specification.md)
 - [Choosing between ZRAM and Zswap](docs/choosing_between_zram_and_zswap_-_practical_guide.md)
 
 ---
