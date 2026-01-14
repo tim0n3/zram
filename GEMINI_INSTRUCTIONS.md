@@ -20,3 +20,10 @@ Gemini is the main worker for general code generation and a sounding-board revie
 
 - Provide concise feedback in PR comments, with clear suggestions.
 - Flag potential risks, regressions, or portability concerns.
+
+## Task Routing
+
+When routine work is needed, look for the task pointer below and follow the tasks in order.
+Use this for mundane code or documentation generation.
+
+GEMINI_TASKS: docs/GEMINI_TASKS.md

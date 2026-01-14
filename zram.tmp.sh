@@ -42,7 +42,7 @@ command_exists() {
 }
 
 load_config() {
-    if [[ -f "$CONFIG_FILE" ]]; then
+    if [[ -f $CONFIG_FILE ]]; then
         # shellcheck disable=SC1090
         source "$CONFIG_FILE"
         log "INFO" "Loaded configuration from $CONFIG_FILE"
@@ -101,12 +101,12 @@ list_active_swaps() {
 lower_system_swap_priority() {
     local name priority used
     while read -r name priority used; do
-        [[ -z "$name" ]] && continue
-        if [[ "$name" == /dev/zram* ]]; then
+        [[ -z $name ]] && continue
+        if [[ $name == /dev/zram* ]]; then
             continue
         fi
-        if [[ "$priority" -ge "$ZRAM_PRIORITY" ]]; then
-            if [[ "$used" -gt 0 ]]; then
+        if [[ $priority -ge $ZRAM_PRIORITY ]]; then
+            if [[ $used -gt 0 ]]; then
                 log "WARN" "Swap $name in use; cannot lower priority safely."
                 continue
             fi
@@ -125,16 +125,16 @@ lower_system_swap_priority() {
 disable_existing_zram() {
     local device
     for device in /dev/zram*; do
-        [[ -b "$device" ]] || continue
+        [[ -b $device ]] || continue
         log "INFO" "Disabling swap on $device"
         swapoff "$device" || log "WARN" "Failed to disable swap on $device"
     done
 
     local sys_device
     for sys_device in /sys/block/zram*; do
-        [[ -d "$sys_device" ]] || continue
+        [[ -d $sys_device ]] || continue
         if [[ -w "$sys_device/reset" ]]; then
-            echo 1 > "$sys_device/reset"
+            echo 1 >"$sys_device/reset"
             log "INFO" "Reset $sys_device"
         fi
     done
@@ -152,8 +152,8 @@ ensure_zram_devices() {
     if [[ -d /sys/class/zram-control ]]; then
         local existing
         existing=$(find /sys/block -maxdepth 1 -name 'zram*' -type d 2>/dev/null | wc -l | tr -d ' ')
-        while [[ "$existing" -lt "$cores" ]]; do
-            if ! echo 1 > /sys/class/zram-control/hot_add; then
+        while [[ $existing -lt $cores ]]; do
+            if ! echo 1 >/sys/class/zram-control/hot_add; then
                 fail_gracefully "Unable to create additional ZRAM devices."
             fi
             existing=$((existing + 1))
@@ -171,7 +171,7 @@ ensure_dependencies() {
         fi
     done
 
-    if (( ${#missing[@]} )); then
+    if ((${#missing[@]})); then
         log "WARN" "Missing required binaries: ${missing[*]}"
         fail_gracefully "Cannot configure ZRAM without required binaries."
     fi
@@ -182,7 +182,7 @@ ensure_dependencies() {
 
         # --- FIX: Determine Package Name based on Distro/PkgManager ---
         local kmod_pkg=""
-        
+
         if command_exists dnf || command_exists yum; then
             # RHEL / CentOS / Alma / Fedora
             kmod_pkg="kernel-modules-extra-$(uname -r)"
@@ -199,10 +199,10 @@ ensure_dependencies() {
         if ! install_package "$kmod_pkg"; then
             fail_gracefully "ZRAM module not available and installation failed."
         fi
-        
+
         # 3. Verify success immediately after install
         if ! modinfo zram >/dev/null 2>&1; then
-             fail_gracefully "Package installed, but ZRAM module still not found (reboot might be required)."
+            fail_gracefully "Package installed, but ZRAM module still not found (reboot might be required)."
         fi
     fi
 }
@@ -213,7 +213,7 @@ configure_zram_devices() {
     local mem_per_core
 
     mem_total_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
-    if [[ -z "$mem_total_kb" ]]; then
+    if [[ -z $mem_total_kb ]]; then
         fail_gracefully "Unable to read total memory."
     fi
 
@@ -226,19 +226,19 @@ configure_zram_devices() {
         local device="/dev/zram${core}"
         local sys_device="/sys/block/zram${core}"
 
-        if [[ ! -b "$device" ]]; then
+        if [[ ! -b $device ]]; then
             log "WARN" "Skipping missing device $device"
             continue
         fi
 
         if [[ -w "$sys_device/comp_algorithm" ]]; then
-            if ! echo "$COMPRESSION_ALGO" > "$sys_device/comp_algorithm"; then
+            if ! echo "$COMPRESSION_ALGO" >"$sys_device/comp_algorithm"; then
                 log "WARN" "Failed to set compression on $device"
             fi
         fi
 
         if [[ -w "$sys_device/disksize" ]]; then
-            if ! echo "$mem_per_core" > "$sys_device/disksize"; then
+            if ! echo "$mem_per_core" >"$sys_device/disksize"; then
                 log "WARN" "Failed to set disksize on $device"
                 continue
             fi
@@ -264,7 +264,7 @@ main() {
 
     local cores
     cores=$(cpu_cores)
-    if [[ -z "$cores" || "$cores" -lt 1 ]]; then
+    if [[ -z $cores || $cores -lt 1 ]]; then
         fail_gracefully "Unable to determine CPU core count."
     fi
 
