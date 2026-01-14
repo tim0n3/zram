@@ -93,7 +93,7 @@ ensure_dependencies() {
 
         local kmod_pkg=""
         if command_exists dnf || command_exists yum; then
-            kmod_pkg="kernel-modules-extra-$(uname -r)"
+            kmod_pkg="kernel-modules-$(uname -r)"
         elif command_exists apt-get; then
             kmod_pkg="linux-modules-extra-$(uname -r)"
         else
