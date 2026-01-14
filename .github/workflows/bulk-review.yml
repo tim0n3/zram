@@ -1,0 +1,45 @@
+name: Bulk Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  bulk-review:
+    name: bulk-review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make shellcheck shfmt jq
+      - name: Run bulk review
+        id: bulk_review
+        continue-on-error: true
+        run: bash .github/scripts/bulk-review.sh
+      - name: Post/update PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: .github/scripts/out/bulk-review.md
+          comment-identifier: bulk-review-report
+      - name: Read lint status
+        id: lint_status
+        run: echo "lint_rc=$(cat .github/scripts/out/lint.rc)" >> "$GITHUB_OUTPUT"
+      - name: Create lint issues (if labeled)
+        if: ${{ steps.lint_status.outputs.lint_rc != '0' && contains(github.event.pull_request.labels.*.name, 'bulk-review-issues') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/create-bulk-review-issues.sh
+      - name: Fail if lint failed
+        if: ${{ steps.lint_status.outputs.lint_rc != '0' }}
+        run: exit 1

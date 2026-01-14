@@ -173,7 +173,7 @@ ensure_zram_devices() {
 
     if [[ -d /sys/class/zram-control ]]; then
         local existing
-        existing=$(ls /sys/block/zram* 2>/dev/null | wc -l | tr -d ' ')
+        existing=$(find /sys/block -maxdepth 1 -name 'zram*' -type d 2>/dev/null | wc -l | tr -d ' ')
         while [[ "$existing" -lt "$cores" ]]; do
             if ! echo 1 > /sys/class/zram-control/hot_add; then
                 fail_gracefully "Unable to create additional ZRAM devices."
@@ -198,7 +198,7 @@ configure_zram_devices() {
     log "INFO" "Using compression algorithm: $COMPRESSION_ALGO"
     log "INFO" "Configuring $cores ZRAM devices with ${mem_per_core} bytes each"
 
-    for core in $(seq 0 $((cores - 1))); do
+    for ((core = 0; core < cores; core++)); do
         local device="/dev/zram${core}"
         local sys_device="/sys/block/zram${core}"
 
