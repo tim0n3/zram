@@ -48,6 +48,8 @@ sudo systemctl enable --now zram.service
 
 Create `/etc/zram-daemon.conf` to override defaults:
 
+**Security Note**: Ensure the file is owned by `root:root` with permissions `0644` to prevent unauthorized modification.
+
 ```bash
 COMPRESSION_ALGO="zstd"
 ZRAM_PRIORITY=100
