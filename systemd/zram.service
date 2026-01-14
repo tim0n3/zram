@@ -1,0 +1,15 @@
+[Unit]
+Description=Configure ZRAM swap devices
+Documentation=https://github.com/yourusername/zram-setup-script
+DefaultDependencies=no
+After=systemd-modules-load.service local-fs.target
+Before=swap.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/zram.sh
+ExecStop=/usr/local/sbin/zram.sh stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
