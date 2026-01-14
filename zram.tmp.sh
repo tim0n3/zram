@@ -74,28 +74,6 @@ install_package() {
     fi
 }
 
-ensure_dependencies() {
-    local missing=()
-
-    for binary in awk modinfo modprobe mkswap swapon swapoff; do
-        if ! command_exists "$binary"; then
-            missing+=("$binary")
-        fi
-    done
-
-    if (( ${#missing[@]} )); then
-        log "WARN" "Missing required binaries: ${missing[*]}"
-        fail_gracefully "Cannot configure ZRAM without required binaries."
-    fi
-
-    if ! modinfo zram >/dev/null 2>&1; then
-        log "WARN" "ZRAM module not found. Attempting to install kernel modules."
-        if ! install_package "linux-modules-extra-$(uname -r)"; then
-            fail_gracefully "ZRAM module not available and installation failed."
-        fi
-    fi
-}
-
 ensure_system_swap_active() {
     if ! command_exists swapon; then
         log "WARN" "swapon is unavailable; skipping system swap checks."
@@ -162,6 +140,27 @@ disable_existing_zram() {
     done
 }
 
+ensure_zram_devices() {
+    local cores="$1"
+
+    if ! modprobe zram num_devices="$cores"; then
+        if [[ ! -d /sys/class/zram-control ]]; then
+            fail_gracefully "Unable to load ZRAM module."
+        fi
+    fi
+
+    if [[ -d /sys/class/zram-control ]]; then
+        local existing
+        existing=$(find /sys/block -maxdepth 1 -name 'zram*' -type d 2>/dev/null | wc -l | tr -d ' ')
+        while [[ "$existing" -lt "$cores" ]]; do
+            if ! echo 1 > /sys/class/zram-control/hot_add; then
+                fail_gracefully "Unable to create additional ZRAM devices."
+            fi
+            existing=$((existing + 1))
+        done
+    fi
+}
+
 ensure_dependencies() {
     local missing=()
 
@@ -191,9 +190,9 @@ ensure_dependencies() {
             # Debian / Ubuntu
             kmod_pkg="linux-modules-extra-$(uname -r)"
         else
-            # Fallback or specific handling for pacman/zypper if needed
+            # Fallback for unsupported or unrecognized distros.
             log "WARN" "Could not determine kernel module package name for this distro."
-            kmod_pkg="linux-modules-extra-$(uname -r)" 
+            fail_gracefully "Cannot install ZRAM kernel module automatically on this distro."
         fi
         # -------------------------------------------------------------
 
@@ -281,7 +280,6 @@ main() {
     ensure_dependencies
 
     disable_existing_zram
-    ensure_system_swap_active
 
     ensure_zram_devices "$cores"
     configure_zram_devices "$cores"
