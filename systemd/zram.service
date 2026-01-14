@@ -1,6 +1,6 @@
 [Unit]
 Description=Configure ZRAM swap devices
-Documentation=https://github.com/yourusername/zram-setup-script
+Documentation=https://github.com/tim0n3/zram
 DefaultDependencies=no
 After=systemd-modules-load.service local-fs.target
 Before=swap.target
