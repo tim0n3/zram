@@ -90,7 +90,18 @@ ensure_dependencies() {
 
     if ! modinfo zram >/dev/null 2>&1; then
         log "WARN" "ZRAM module not found. Attempting to install kernel modules."
-        if ! install_package "linux-modules-extra-$(uname -r)"; then
+
+        local kmod_pkg=""
+        if command_exists dnf || command_exists yum; then
+            kmod_pkg="kernel-modules-extra-$(uname -r)"
+        elif command_exists apt-get; then
+            kmod_pkg="linux-modules-extra-$(uname -r)"
+        else
+            log "WARN" "Could not determine kernel module package name for this distro."
+            fail_gracefully "Cannot install ZRAM kernel module automatically on this distro."
+        fi
+
+        if ! install_package "$kmod_pkg"; then
             fail_gracefully "ZRAM module not available and installation failed."
         fi
     fi
